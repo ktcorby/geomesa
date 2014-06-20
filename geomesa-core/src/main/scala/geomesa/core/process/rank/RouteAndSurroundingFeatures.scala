@@ -3,6 +3,8 @@ package geomesa.core.process.rank
 import com.vividsolutions.jts.geom.{Geometry, Envelope, Polygon}
 import org.geotools.geometry.jts.GeometryBuilder
 
+import scala.beans.BeanProperty
+
 /**
  * Created with IntelliJ IDEA.
  * User: kevin
@@ -10,7 +12,7 @@ import org.geotools.geometry.jts.GeometryBuilder
  * Time: 10:44 AM
  */
 
-case class EvidenceOfMotion(total: Double, max: Double, stddev: Double)
+case class EvidenceOfMotion(@BeanProperty total: Double, @BeanProperty max: Double, @BeanProperty stddev: Double)
 
 case class RankingValues(tubeCount: Int, boxCount: Int, boxCellsCovered: Int, tubeCellsCovered: Int,
                          tubeCellsStddev: Double, motionEvidence: EvidenceOfMotion, gridDivisions: Int,
@@ -29,10 +31,12 @@ case class RankingValues(tubeCount: Int, boxCount: Int, boxCellsCovered: Int, tu
 }
 
 object RankingDefaults {
-  val defaultEvidenceOfMotion = EvidenceOfMotion(0.0, 0.0, 0.0)
-  val defaultRouteDivisions = 100.0
-  val defaultGridDivisions = 100
-  val maxTimeBetweenPings = 60 * 60 // one hour in seconds
+  final val defaultEvidenceOfMotion = EvidenceOfMotion(0.0, 0.0, 0.0)
+  final val defaultRouteDivisions = 100.0
+  final val defaultGridDivisions = 100
+  final val maxTimeBetweenPings = 60 * 60 // one hour in seconds
+  final val defaultMaxResultsStr = "1000"
+  final val defaultResultsSortField = "combined.score"
 }
 
 class RouteAndSurroundingFeatures(val route: Route,

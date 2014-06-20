@@ -1,5 +1,7 @@
 package geomesa.core.process.rank
 
+import java.util
+
 import com.vividsolutions.jts.geom.{Geometry, LineString}
 import geomesa.core.data.AccumuloFeatureCollection
 import geomesa.core.index
@@ -13,8 +15,8 @@ import org.geotools.geometry.jts.{JTS, ReferencedEnvelope}
 import org.geotools.process.factory.{DescribeParameter, DescribeProcess, DescribeResult}
 import org.geotools.referencing.CRS
 import org.geotools.referencing.crs.DefaultGeographicCRS
-import org.opengis.feature.simple.SimpleFeatureType
-
+import scala.beans.BeanProperty
+import scala.collection.JavaConverters._
 import scala.util.Try
 
 /**
@@ -56,9 +58,30 @@ class RouteRankProcess {
                @DescribeParameter(
                  name = "keyField",
                  description = "The name of the key attribute to group by")
-               keyField: String
+               keyField: String,
 
-               ): String = {
+               @DescribeParameter(
+                  name = "skip",
+                  min = 0,
+                  defaultValue = "0",
+                  description = "The number of results to skip (for paging)")
+                skip: Int,
+
+               @DescribeParameter(
+                 name = "max",
+                 min = 0,
+                 defaultValue = RankingDefaults.defaultMaxResultsStr,
+                 description = "The maximum number of results to return")
+               max: Int,
+
+               @DescribeParameter(
+                 name = "sortBy",
+                 min = 0,
+                 defaultValue = RankingDefaults.defaultResultsSortField,
+                 description = "The field to sort by")
+               sortBy: String
+
+               ): ResultBean = {
 
     log.info("Attempting Geomesa Route Rank on collection type " + dataFeatures.getClass.getName)
 
@@ -93,7 +116,9 @@ class RouteRankProcess {
         log.warn("WARNING: input feature to rank process must be a single LineString")
         Map[String, RankingValues]()
     }
-    "" + rv.size
+    toResultBean(rv, skip, max, sortBy)
+      //Option(max).getOrElse(RankingDefaults.defaultMaxResults),
+      //Option(sortBy).getOrElse(RankingDefaults.defaultResultsSortField))
   }
 
   private def extractRoute(inputFeatures: SimpleFeatureCollection): Option[Route] = {
@@ -124,5 +149,27 @@ class RouteRankProcess {
     JTS.toGeometry(env2)
   }
 
-
+  private def toResultBean(rankingValues: Map[String, RankingValues], skip: Int, max: Int, sortBy: String) =
+    ResultBean(new util.ArrayList(rankingValues.map {
+      case (key, rv) => RankingValuesBean(key, Counts(rv.tubeCount, rv.boxCount),
+        CellsCovered(rv.boxCellsCovered, rv.tubeCellsCovered, rv.percentageOfTubeCellsCovered, rv.avgPerTubeCell),
+        RouteCellDeviation(rv.tubeCellsStddev, rv.scaledTubeCellStddev, rv.tubeCellDeviationScore),
+        TfIdf(rv.idf, rv.tfIdf, rv.scaledTfIdf),
+        EvidenceOfMotion(rv.motionEvidence.total, rv.motionEvidence.max, rv.motionEvidence.stddev),
+        Combined(rv.combinedScoreNoMotion, rv.combinedScore))
+    }.toList.sortBy(_.combined.score * -1.0).slice(skip, skip + max).asJava))
 }
+
+case class Counts(@BeanProperty route: Int, @BeanProperty box: Int)
+case class CellsCovered(@BeanProperty box: Int, @BeanProperty route: Int,
+                        @BeanProperty percentageOfRouteCovered: Double, @BeanProperty avgPerRouteCell: Double)
+case class RouteCellDeviation(@BeanProperty stddev: Double, @BeanProperty scaledStddev: Double,
+                              @BeanProperty deviationScore: Double)
+case class TfIdf(@BeanProperty idf: Double, @BeanProperty tfIdf: Double, @BeanProperty scaledTfIdf: Double)
+case class Combined(@BeanProperty scoreNoMotion: Double, @BeanProperty score: Double)
+case class RankingValuesBean(@BeanProperty key: String, @BeanProperty counts: Counts,
+                             @BeanProperty cellsCovered: CellsCovered,
+                             @BeanProperty routeCellDeviation: RouteCellDeviation, @BeanProperty tfIdf: TfIdf,
+                             @BeanProperty motionEvidence: EvidenceOfMotion, @BeanProperty combined: Combined)
+case class ResultBean(@BeanProperty results: java.util.List[RankingValuesBean])
+
